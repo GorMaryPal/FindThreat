@@ -1,205 +1,89 @@
 ---
-title: "Практика 5"
-author: "Горбачева Мария Павловна"
-format:
-  md:
-    output-file: "README.md"
-editor: "visual"
+ title: "Анализ данных сетевого трафика при помощи библиотеки Arrow"
+ author: "Горбачева Мария Павловна"
+ format: 
+   md:
+     output-file: README.md
 ---
 
-Исследование информации о состоянии беспроводных сетей.
+## Цель работы 
 
-## Цель
+1. Изучить возможности технологии Apache Arrow для обработки и анализ больших данных
+2. Получить навыки применения Arrow совместно с языком программирования R
+3. Получить навыки анализа метаинфомации о сетевом трафике
+4. Получить навыки применения облачных технологий хранения, подготовки и анализа данных: Yandex Object Storage, Rstudio Server.
 
-1.  Получить знания о методах исследования радиоэлектронной обстановки.
+## Исходные данные 
+ 
+1. Программное обеспечение Windows 10 
+2. Rstudio Desktop и библиотека Dplyr
+3. Интерпретатор яз/*ыка R 4.1
+4. Сервис Yandex DataLens
+5. Apache Arrow
 
-2.  Составить представление о механизмах работы Wi-Fi сетей на канальном и сетевом уровне модели OSI.
+## Задание
 
-3.  Зекрепить практические навыки использования языка программирования R для\
-    обработки данных.
+Используя язык программирования R, библиотеку arrow и облачную IDE Rstudio Server, развернутую в Yandex Cloud, выполнить задания и составить отчет.
 
-4.  Закрепить знания основных функций обработки данных экосистемы tidyverseязыка R.
+## План
 
-## Исходные данные
+1.  Выполним практическое задание
+2.  Составим отчет
 
--   Компьютер
+## Ход работы
 
--   ОС Windows
-
--   Rstudio
-
--   Библиотека readr
-
--   Данные P2_wifi_data, собранные с помощью анализатора беспроводного трафика airodump-ng
-
--   Github
-
-## Общий план выполнения
-
-1.  Подготовка данных
-
-2.  Анализ точек доступа
-
-3.  Анализ данных клиентов
-
-## Содержание ЛР
-
-### Шаг 1. Подготовка данных
-
-Импортированы данные о беспроводном трафике.
+### Импорт данных
 
 ```{r}
-Data <- read.csv('./P2_wifi_data.csv')
-head(Data)
-```
-
-Формат CSV лога airodump-ng меняется внутри файла (имеет разное число столбцов). По сути, это два разных датасета:
-
--   датасет 1 – анонсы беспроводных точек доступа;
-
--   датасет 2 – запросы на подключение клиентов к известным им точкам доступа.
-    \
-    Разъеденим данные на два датасета.
-
-```{r}
+library(arrow)
 library(tidyverse)
-library(readr)
+#download.file('https://storage.yandexcloud.net/arrow-datasets/tm_data.pqt', destfile = "tm_data.pqt")
+df <- read_parquet("tm_data.pqt", use_threads = FALSE)
 ```
+### Задание 1. Найдите утечку данных из Вашей сети
+
+Один из хостов в нашей сети используется для пересылки этой информации – он пересылает гораздо больше информации на внешние ресурсы в Интернете, чем остальные компьютеры нашей сети. Определите его IP-адрес
 
 ```{r}
-access_points <- read.csv('./P2_wifi_data.csv', nrows = 167)
-head(access_points)
-
+ff <- df%>%filter(grepl("^12.|^13.|^14.", src) & !grepl("^12.|^13.|^14.", dst))%>%group_by(src) %>% summarise("sum" = sum(bytes)) %>% select(src,sum) 
+ff1 <- ff%>%filter(sum>6000000000)
+glimpse(ff1)
 ```
+
+### Задание 2. Найдите утечку данных из Вашей сети 2 
+
+Другой атакующий установил автоматическую задачу в системном планировщике cron для экспорта содержимого внутренней wiki системы. Эта система генерирует большое количество трафика в нерабочие часы, больше чем остальные хосты. Определите IP этой системы. Известно, что ее IP адрес отличается от нарушителя из предыдущей задачи.
 
 ```{r}
-client_requests <- read.csv('./P2_wifi_data.csv', skip = 169)
-head(client_requests)
+z2 <- df%>%select(timestamp, src, dst, bytes)%>%mutate(trafic=grepl("^12.|^13.|^14.", src) & !grepl("^12.|^13.|^14.",dst),time=hour(as_datetime(timestamp/1000))) %>%filter(trafic==TRUE,time>=0&time<=24)%>% group_by(time)%>%summarise(trafictime=n())%>%arrange(desc(trafictime))
+glimpse(z2)
 ```
 
-Приведены датасеты в вид “аккуратных данных”, преобразованы типы столбцов в соответствии с типом данных.
+Следовательно: нерабочие часы - 1-15; рабочие часы - 16-24, тогда
 
 ```{r}
-access_points <- access_points %>% 
-  mutate_at(vars(BSSID, Privacy, Cipher, Authentication, LAN.IP, ESSID), trimws) %>%
-  mutate_at(vars(BSSID, Privacy, Cipher, Authentication, LAN.IP, ESSID), na_if, "")
-
-access_points$First.time.seen <- as.POSIXct(access_points$First.time.seen, format = "%Y-%m-%d %H:%M:%S")
-access_points$Last.time.seen <- as.POSIXct(access_points$Last.time.seen, format = "%Y-%m-%d %H:%M:%S")
-
-client_requests <- client_requests %>% 
-  mutate_at(vars(Station.MAC, BSSID, Probed.ESSIDs), trimws) %>%
-  mutate_at(vars(Station.MAC, BSSID, Probed.ESSIDs), na_if, "")
-
-client_requests$First.time.seen <- as.POSIXct(client_requests$First.time.seen, format = "%Y-%m-%d %H:%M:%S")
-client_requests$Last.time.seen <- as.POSIXct(client_requests$Last.time.seen, format = "%Y-%m-%d %H:%M:%S")
-
+nz2 <- df%>%mutate(time=hour(as_datetime(timestamp/1000)))%>%filter(!grepl("^13.37.84.125",src))%>% filter(grepl("^12.|^13.|^14.", src) & !grepl("^12.|^13.|^14.", dst))%>%filter(time>=1&time<=15)%>%group_by(src)%>%summarise("sum" =sum(bytes))%>%select(src,sum)
+nz22 <- nz2%>%filter(sum>286000000) 
+glimpse(nz22)
 ```
 
-Общая структура данных по датасетам:\
+### Задание 3. Найдите утечку данных из Вашей сети 3
+
+Еще один нарушитель собирает содержимое электронной почты и отправляет в Интернет используя порт, который обычно используется для другого типа трафика. Атакующий пересылает большое количество информации используя этот порт, которое нехарактерно для других хостов, использующих этот номер порта. Определите IP этой системы. Известно, что ее IP адрес отличается от нарушителей из предыдущих задач.
 
 ```{r}
-glimpse(access_points)
+z3 <- df %>% filter(!grepl("^13.37.84.125",src)& !grepl("^12.55.77.96",src))%>% select(src, bytes, port) 
+z33 <- z3%>%group_by(port)%>%summarise("mean"=mean(bytes),"max"=max(bytes),"sum"=sum(bytes))%>%mutate("Raz"= max-mean)%>%filter(Raz!=0, Raz>170000)
+z333 <- z3%>%filter(port==37)%>%group_by(src)%>%summarise("mean"=mean(bytes))%>%filter(mean>37543)%>%select(src)
+glimpse(z333)
 ```
 
-```{r}
-glimpse(client_requests)
-```
-
-### Шаг 2. Анализ точек доступа
-
-Найдены небезопасные точки доступа.
-
-```{r}
-OpnPrivacy <- access_points %>% filter(Privacy == 'OPN') %>% select(BSSID)
-OpnPrivacy = unique(OpnPrivacy)
-head(OpnPrivacy)
-```
-
-Определены производители каждого обнаруженного устройства.
-
-```{r}
-fabricator <- sapply(OpnPrivacy, function(mac) substr(mac, 1, 8)) %>% unique()
-
-fabricator
-```
-
-```         
-E8:28:C1 - Eltex Enterprise Ltd.
-00:25:00 - Apple, Inc.
-E0:D9:E3 - Eltex Enterprise Ltd.
-00:26:99 - Cisco Systems, Inc
-00:03:7A - Taiyo Yuden Co., Ltd.
-00:03:7F - Atheros Communications, Inc.
-```
-
-Остальные производители не были найдены с помощью интренет-ресурса [ouilookup.com](https://ouilookup.com/).
-
-Выявлены устройства, использующие последнюю версию протокола шифрования WPA3, и названия точек доступа, реализованных на этих устройствах.
-
-```{r}
-access_points %>% filter(str_detect(access_points$Privacy, 'WPA3') == TRUE) %>% select(BSSID, ESSID)
-```
-
-Отсортированы точки доступа по интервалу времени в минутах, в течение которого они находились на связи, по убыванию.
-
-```{r}
-access_points %>% mutate(duration = as.numeric(difftime(Last.time.seen, First.time.seen, units = "mins"))) %>% arrange(desc(duration)) %>% select(BSSID, duration) %>% head(10)
-```
-
-\
-Составлен топ-10 самых быстрых точек доступа.
-
-```{r}
-access_points %>% arrange(desc(Speed)) %>%  select(BSSID, Speed) %>% head(10)
-```
-
-Отсортированы точки доступа по частоте отправки запросов (beacons) в единицу времени по их убыванию.
-
-```{r}
-
-```
-
-### Шаг 3. Анализ данных клиентов
-
-Обределены прозводители каждого обраруженного устройства.
-
-```{r}
-
-```
-
-Обнаружены устройства, которые НЕ рандомизируют свой MAC адрес.
-
-```{r}
-
-```
-
-Кластеризованы запросы от устройств к точкам доступа по их именам.
-
-```{r}
-
-```
-
-\
-Время появления устройства в зоне радиовидимости и время выхода его из нее.
-
-```{r}
-
-```
-
-Определена стабильность уровня сигнала внури кластера во времени. Выявлен наиболее стабильный кластер.
-
-```{r}
-
-```
+Ответ: 13.46.35.35
 
 ## Оценка результата
 
-1.  Получены практические навыки использования языка программирования R для обработки данных
-2.  Закреплены знания базовых типов данных языка R
-3.  Получены практические навыки использования функций обработки данных пакета dplyr
-4.  Закреплены знания основных функций обработки данных экосистемы tidyverseязыка R
+Используя язык программирования R, библиотеку arrow и облачную IDE Rstudio Server, развернутую в Yandex Cloud, задания были успешно выполнены.
 
-## Вывод
+## Вывод 
 
-В результате выполнения работы были закреплены умения работы с основными инструментами обработки данных на языке R.
+Apache Arrow - хорошее средство для решения задач с большими данными и анализа информации о сетевом трафике
