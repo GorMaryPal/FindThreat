@@ -1,0 +1,120 @@
+---
+title: "Основы обработки данных с помощью R и Dplyr"
+author: "Горбачева Мария Павловна"
+format: 
+  md:
+    output-file: README.md
+---
+# Лабораторная работа №3
+
+## Цель работы 
+
+1. Развить практические навыки использования языка программирования R для
+обработки данных
+2. Закрепить знания базовых типов данных языка R
+3. Развить практические навыки использования функций обработки данных пакета
+dplyr – функции select(), filter(), mutate(), arrange(), group_by()
+
+## Ход выполнения работы
+
+Загружаем необходимые библиотеки
+
+```{r}
+library(dplyr)
+library(nycflights13)
+```
+
+Сколько встроенных в пакет nycflights13 датафреймов?
+
+```{r}
+data(package = "nycflights13")$results[, "Item"]
+```
+
+Сколько строк в каждом датафрейме?
+
+```{r}
+sapply(list(flights, airlines, airports, planes, weather), nrow)
+```
+
+Сколько столбцов в каждом датафрейме?
+
+```{r}
+sapply(list(flights, airlines, airports, planes, weather), ncol)
+```
+
+Как просмотреть примерный вид датафрейма?
+
+```{r}
+library(dplyr)
+glimpse(flights)
+```
+
+Сколько компаний-перевозчиков (carrier) учитывают эти наборы данных?
+
+```{r}
+length(unique(flights$carrier))
+```
+
+Сколько рейсов принял аэропорт John F Kennedy Intl в мае?
+
+```{r}
+flights %>%
+  filter(dest == "JFK", month == 5) %>%
+  nrow()
+```
+
+Какой самый северный аэропорт?
+
+```{r}
+airports %>%
+  arrange(desc(lat)) %>%
+  select(name, lat) %>%
+  head(1)
+```
+
+Какой аэропорт самый высокогорный (находится выше всех над уровнем моря)?
+
+```{r}
+airports %>%
+  arrange(desc(alt)) %>%
+  select(name, alt) %>%
+  head(1)
+```
+
+Какие бортовые номера у самых старых самолетов?
+
+```{r}
+planes %>%
+  arrange(year) %>%
+  select(tailnum, year) %>%
+  head(5)
+```
+
+Какая средняя температура воздуха была в сентябре в аэропорту John F Kennedy Intl?
+
+```{r}
+weather %>%
+  filter(origin == "JFK", month == 9) %>%
+  summarise(mean_temp_C = mean((temp - 32) * 5/9, na.rm = TRUE))
+```
+
+Самолеты какой авиакомпании совершили больше всего вылетов в июне?
+
+```{r}
+flights %>%
+  filter(month == 6) %>%
+  group_by(carrier) %>%
+  summarise(flight_count = n()) %>%
+  arrange(desc(flight_count)) %>%
+  head(1)
+```
+
+Самолеты какой авиакомпании задерживались чаще других в 2013 году?
+
+```{r}
+flights %>%
+  group_by(carrier) %>%
+  summarise(avg_delay = mean(arr_delay, na.rm = TRUE)) %>%
+  arrange(desc(avg_delay)) %>%
+  head(1)
+```
