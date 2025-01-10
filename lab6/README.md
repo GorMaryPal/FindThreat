@@ -82,6 +82,9 @@ and \[src\] not LIKE ‘13.%’ and \[src\] not LIKE ‘14.%’)) THEN “Вхо
 
 ![](img/6.png)
 
+## Ссылка на дашборд
+https://datalens.yandex.cloud/0jabw4vsi7oen-dashboard-by-gorbacheva
+
 ## Оценка результата
 
 По итогам работы были разработаны чарты и составлен дашборд, основанный
